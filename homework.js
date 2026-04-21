@@ -13,6 +13,8 @@ const API_PATH = process.env.API_PATH;
 const BASE_URL = 'https://livejs-api.hexschool.io';
 const ADMIN_TOKEN = process.env.API_KEY;
 
+axios.defaults.baseURL = BASE_URL;
+
 // ========================================
 // 任務一：日期處理 - dayjs
 // ========================================
@@ -25,6 +27,7 @@ const ADMIN_TOKEN = process.env.API_KEY;
 function formatOrderDate(timestamp) {
   // 請實作此函式
   // 提示：dayjs.unix(timestamp).format('YYYY/MM/DD HH:mm')
+  return dayjs.unix(timestamp).format('YYYY/MM/DD HH:mm')
 }
 
 /**
@@ -38,6 +41,9 @@ function getDaysAgo(timestamp) {
   // 1. 用 dayjs() 取得今天
   // 2. 用 dayjs.unix(timestamp) 取得訂單日期
   // 3. 用 .diff() 計算天數差異
+  const diffDay = dayjs().diff(dayjs.unix(timestamp),'d')
+
+  return diffDay === 0 ? '今天' : `${diffDay}天前`
 }
 
 /**
@@ -47,6 +53,8 @@ function getDaysAgo(timestamp) {
  */
 function isOrderOverdue(timestamp) {
   // 請實作此函式
+
+  return dayjs().diff(dayjs.unix(timestamp),'d',true) > 7
 }
 
 /**
@@ -60,6 +68,10 @@ function getThisWeekOrders(orders) {
   // 1. 用 dayjs().startOf('week') 取得本週開始
   // 2. 用 dayjs().endOf('week') 取得本週結束
   // 3. 用 .isBefore() 和 .isAfter() 判斷
+  const weekStart = dayjs().startOf('week') 
+  const weekEnd = dayjs().endOf('week')
+
+  return orders.filter(e => dayjs.unix(e.createdAt).isBefore(weekEnd) && dayjs.unix(e.createdAt).isAfter(weekStart))
 }
 
 // ========================================
@@ -80,6 +92,24 @@ function getThisWeekOrders(orders) {
  */
 function validateOrderUser(data) {
   // 請實作此函式
+  const {name,tel,email,address,payment} = data
+  const telRegex = /^09\d{8}$/
+  const paymentOptions = ['ATM', 'Credit Card', 'Apple Pay']
+
+  const validateData = {
+    name:!!name.trim(),
+    tel: telRegex.test(tel),
+    email: email.includes('@'),
+    address: !!address.trim(),
+    payment: paymentOptions.includes(payment)
+  }
+
+  const errors = Object.entries(validateData).filter(([key,value])=> !value).map(([key,value])=> key)
+
+  return {
+    isValid: errors.length === 0, 
+    errors
+  }
 }
 
 /**
@@ -94,6 +124,13 @@ function validateOrderUser(data) {
  */
 function validateCartQuantity(quantity) {
   // 請實作此函式
+  const isValid = Number.isInteger(quantity) && quantity > 0 && quantity < 99
+
+
+  return {
+    isValid, 
+    error: isValid ? '' : '數量需為整數，且在1~99之間'
+  }
 }
 
 // ========================================
@@ -107,6 +144,7 @@ function validateCartQuantity(quantity) {
 function generateOrderId() {
   // 請實作此函式
   // 提示：可以用 Date.now().toString(36) + Math.random().toString(36).slice(2)
+  return 'ORD-' + Date.now().toString(36) + Math.random().toString(36).slice(2)
 }
 
 /**
@@ -115,6 +153,7 @@ function generateOrderId() {
  */
 function generateCartItemId() {
   // 請實作此函式
+  return 'CART-' + Date.now().toString(36) + Math.random().toString(36).slice(2)
 }
 
 // ========================================
@@ -129,6 +168,15 @@ async function getProductsWithAxios() {
   // 請實作此函式
   // 提示：axios.get() 會自動解析 JSON，不需要 .json()
   // 回傳 response.data.products
+  try{
+
+    const res = await axios.get(`/api/livejs/v1/customer/${API_PATH}/products`)
+
+    return res.data.products
+
+  }catch(error){
+    console.log(error)
+  }
 }
 
 /**
@@ -140,6 +188,22 @@ async function getProductsWithAxios() {
 async function addToCartWithAxios(productId, quantity) {
   // 請實作此函式
   // 提示：axios.post(url, data) 會自動設定 Content-Type
+   try{
+
+    const body ={
+      data: {
+        productId,
+        quantity
+      }
+    }
+
+    const res = await axios.post(`/api/livejs/v1/customer/${API_PATH}/carts`,body)
+
+    return res.data
+
+  }catch(error){
+    console.log(error)
+  }
 }
 
 /**
@@ -149,16 +213,29 @@ async function addToCartWithAxios(productId, quantity) {
 async function getOrdersWithAxios() {
   // 請實作此函式
   // 提示：axios.get(url, { headers: { authorization: token } })
+  try{
+
+    const res = await axios.get(`/api/livejs/v1/admin/${API_PATH}/orders`,{ headers: { authorization: ADMIN_TOKEN } })
+
+    return res.data.orders
+
+  }catch(error){
+    console.log(error)
+  }
 }
 
 /*
 比較題：請說明 fetch 和 axios 的主要差異
 
-1. ____________________________________
-
-2. ____________________________________
-
-3. ____________________________________
+1. 
+  Fetch為原生API
+  axios是第三方套件需而外安裝
+2. 
+  Fetch僅在網路中斷時報錯，404/500 會視為成功
+  axios只要 HTTP 狀態碼超出 2xx 範圍就會報錯
+3.
+  Fetch需要手動執行 .json() 轉換
+  axios自動轉換 JSON 數據
 */
 
 // ========================================
@@ -179,6 +256,15 @@ const OrderService = {
    */
   async fetchOrders() {
     // 請實作此函式
+    try{
+
+      const res = await axios.get(`/api/livejs/v1/admin/${OrderService.apiPath}/orders`,{ headers: { authorization: OrderService.token } })
+
+      return res.data.orders
+
+    }catch(error){
+      console.log(error)
+    }
   },
 
   /**
@@ -188,6 +274,7 @@ const OrderService = {
    */
   formatOrders(orders) {
     // 請實作此函式
+    return orders.map(e =>({...e, formattedDate:''}))
   },
 
   /**
@@ -197,6 +284,7 @@ const OrderService = {
    */
   filterUnpaidOrders(orders) {
     // 請實作此函式
+    return orders.filter(e => !e.paid)
   },
 
   /**
